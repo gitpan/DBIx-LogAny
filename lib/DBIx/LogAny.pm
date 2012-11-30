@@ -4,7 +4,7 @@ require 5.008;
 use strict;
 use warnings;
 use Carp qw(croak cluck);
-use Log::Any qw($log);
+use Log::Any;
 use Data::Dumper;
 
 package DBIx::LogAny;
@@ -12,7 +12,7 @@ use DBIx::LogAny::Constants qw (:masks $LogMask);
 use DBIx::LogAny::db;
 use DBIx::LogAny::st;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 require Exporter;
 our @ISA = qw(Exporter DBI);		# look in DBI for anything we don't do
 
@@ -29,6 +29,7 @@ our @EXPORT_MASKS = qw(DBIX_LA_LOG_DEFAULT
 		       DBIX_LA_LOG_DBDSPECIFIC
 		       DBIX_LA_LOG_DELAYBINDPARAM
 		       DBIX_LA_LOG_SQL
+               DBIX_LA_LOG_STORE
 		     );
 our %EXPORT_TAGS= (masks => \@EXPORT_MASKS);
 Exporter::export_ok_tags('masks'); # all tags must be in EXPORT_OK
@@ -42,9 +43,6 @@ sub _dbix_la_debug {
 
     local $Data::Dumper::Indent = 0;
     local $Data::Dumper::Quotekeys = 0;
-
-    local $Log::Log4perl::caller_depth = $Log::Log4perl::caller_depth + $level
-        if $h->{ll_loaded} && $level;
 
     if (scalar(@args) > 1) {
         $h->{logger}->debug(
@@ -73,9 +71,6 @@ sub _dbix_la_info {
 
     return unless $h->{logger}->is_info();
 
-    local $Log::Log4perl::caller_depth = $Log::Log4perl::caller_depth + $level
-        if $h->{ll_loaded} && $level;
-
     $h->{logger}->info($thing);
 
     return;
@@ -89,9 +84,6 @@ sub _dbix_la_warning {
 
     local $Data::Dumper::Indent = 0;
     local $Data::Dumper::Quotekeys = 0;
-
-    local $Log::Log4perl::caller_depth = $Log::Log4perl::caller_depth + $level
-        if $h->{ll_loaded} && $level;
 
     if (scalar(@args) > 1) {
 	$h->{logger}->warn(
@@ -115,9 +107,6 @@ sub _dbix_la_error {
     local $Data::Dumper::Indent = 0;
     local $Data::Dumper::Quotekeys = 0;
 
-    local $Log::Log4perl::caller_depth = $Log::Log4perl::caller_depth + $level
-        if $h->{ll_loaded} && $level;
-
     if (scalar(@args) > 1) {
 	$h->{logger}->error(
 	    sub {Data::Dumper->Dump([\@args], [$thing])})
@@ -135,7 +124,9 @@ sub _dbix_la_error {
 sub _dbix_la_attr_map {
     return {
 	    dbix_la_logmask => 'logmask',
-            dbix_la_ignore_err_regexp => 'err_regexp'
+        dbix_la_ignore_err_regexp => 'err_regexp',
+        dbix_la_category => 'category',
+        dbix_la_logger => 'logger'
 	   };
 }
 
@@ -181,13 +172,31 @@ sub connect {
     my $dbh = $drh->SUPER::connect($dsn, $user, $pass, $attr);
     return $dbh if (!$dbh);
 
+    my $h = $dbh->{private_DBIx_LogAny};
+
+    if ($h->{logmask} & DBIX_LA_LOG_CONNECT) {
+        local $Data::Dumper::Indent = 0;
+        $h->{logger}->debug(
+            "connect($h->{dbh_no}): " .
+                (defined($dsn) ? $dsn : '') . ', ' .
+                    (defined($user) ? $user : '') . ', ' .
+                        Data::Dumper->Dump([$attr], [qw(attr)]))
+            if $h->{logger}->is_debug;
+        no strict 'refs';
+        my $v = "DBD::" . $dbh->{Driver}->{Name} . "::VERSION";
+        $h->{logger}->info("DBI: " . $DBI::VERSION,
+                         ", DBIx::LogAny: " . $DBIx::LogAny::VERSION .
+                             ", Driver: " . $h->{driver} . "(" .
+                                 $$v . ")")
+            if $h->{logger}->is_info;
+    }
+
     #
     # Enable dbms_output for DBD::Oracle else turn off DBDSPECIFIC as we have
     # no support for DBDSPECIFIC in any other drivers.
     # BUT only enable it if the log handle is doing debug as we only call
     # dbms_output_get in that case.
     #
-    my $h = $dbh->{private_DBIx_LogAny};
     $h->{dbd_specific} = 1;
     if (($h->{logger}->is_debug()) &&
             ($h->{logmask} & DBIX_LA_LOG_DBDSPECIFIC) &&
@@ -219,26 +228,44 @@ Log::Any.
 
 =head1 SYNOPSIS
 
-  use Log::LogAny::Adapter;
-  use DBIx::Log4perl;
-
-  Log::Log4perl->init("/etc/mylog.conf");
-  Log::Any::Adapter->set('Log4perl');
-
+  # Simple log to a file
+  use DBIx::LogAny;
+  use Log::Any::Adapter ('File', '/path/to/file.log');
   my $dbh = DBIx::Log4perl->connect('dbi:ODBC:mydsn', $user, $pass);
+  $dbh->DBI_METHOD(args);
+
+  # Make DBIx::LogAny like DBIx::Log4perl i.e. use Log::Log4perl
+  # by default sets the category to DBIx::LogAny. You can override the
+  # category with the dbix_la_category attribute.
+  use Log::Any::Adapter ('Log4perl');
+  use DBIx::Log4perl;
+  use DBIx::LogAny;
+  Log::Log4perl->init("/etc/mylog.conf");
+  my $dbh = DBIx::Log4perl->connect('dbi:ODBC:mydsn', $user, $pass);
+  $dbh->DBI_METHOD(args);
+
+  # use your own log handle passed to DBIx::LogAny
+  use Log::Any::Adapter('File', '/path/to/file.log');
+  use Log::Any;
+  use DBIx::LogAny;
+  my $log2 = Log::Any->get_logger();
+  my $dbh = DBIx::LogAny->connect('dbi:ODBC:mydsn', $user, $pass,
+                                                                 {dbix_la_logger => $log2});
   $dbh->DBI_METHOD(args);
 
 =head1 DESCRIPTION
 
 C<DBIx::LogAny> is a wrapper over DBI which adds logging of your DBI
-activity via Log::LogAny. It is based on the much older DBIx::Log4perl.
+activity via L<Log::Any>. It is based on the much older L<DBIx::Log4perl>.
 
-C<DBIx::LogAny> is almost identical to DBIx::Log4perl except there are currently
-two things which don't work properly as yet:
+C<DBIx::LogAny> is almost identical to DBIx::Log4perl except:
 
-o I cannot find a way with Log::Any to set caller_depth in Log::Log4perl.
-o Log::Any does not support closures passed to log methods and Log::Any
-has a lot of those - see RT 80448.
+o it checks if Log::Log4perl is loaded before setting wrapper_register.
+
+o Log::Any does not support closures passed to log methods so they are
+removed and an "if $log->is_xxx" added.
+
+I'll try and keep DBIx::Log4perl and DBIx::LogAny in synch for a while but I may eventually drop DBIx::Log4perl.
 
 =head1 METHODS
 
@@ -437,6 +464,10 @@ methods. This just separates SQL logging from what
 L</DBIX_LA_LOG_INPUT> does and is generally most useful when combined
 with L<DBIX_LA_LOG_DELAYBINDPARAM>.
 
+=item DBIX_LA_LOG_STORE
+
+Log calls to DBI's STORE method.
+
 =back
 
 =head1 ATTRIBUTES
@@ -447,6 +478,22 @@ connect using C<dbix_la_getattr()> and C<dbix_la_setattr()>.
 C<DBIx::LogAny> supports the following attributes:
 
 =over
+
+=item C<dbix_l4a_category>
+
+This is the string to pass on to Log::Any as the category.
+e.g.
+
+  $logger = Log::Any->get_logger(category => 'xxx::yyy');
+
+By default, if you do not specify this attribute DBIx::LogAny is
+set as the category.
+
+=item C<dbix_l4a_logger>
+
+If you have already initialised and created your own Log::Any handle
+you can pass it in as C<dbix_l4a_logger> and DBIx::LogAny will use it
+instead of getting its own logger.
 
 =item C<dbix_la_logmask>
 
@@ -478,7 +525,7 @@ appear in the log.
 For a connect the log will contain something like:
 
   DEBUG - connect(0): DBI:mysql:mjetest, bet
-  INFO - DBI: 1.50, DBIx::LogAny: 0.01, Driver: mysql(3.0002_4)
+  INFO - DBI: 1.50, DBIx::LogAny: 0.02, Driver: mysql(3.0002_4)
 
 For
 
@@ -793,6 +840,8 @@ L<Log::Any>
 L<Log::Any::Adapter>
 
 L<Log::Log4perl>
+
+L<DBIx::Log4perl>
 
 L<Log::Any::For::DBI>
 
