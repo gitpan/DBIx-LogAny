@@ -1,38 +1,33 @@
---- #YAML:1.0
-name: DBIx-LogAny
-abstract: Log all Perl DBI calls Log::Any
-version: 0.02
-version_from: lib/DBIx/LogAny.pm
+---
+abstract: 'Perl extension for DBI to selectively log DBI'
 author:
-  - Martin J. Evans
-license: perl
-distribution_type: module
-requires:
-    DBI:                           1.5
-    Log::Any:                 0.14
-    Test::More:                    0.62
-    Log::Any::Adapter: 0.10
-    Data::Dumper: 0
-    File::Spec: 0
-    Module::Loaded: 0
+  - 'Martin J. Evans <mjevans@cpan.org>'
 build_requires:
-  DBI: 1.21
+  ExtUtils::MakeMaker: 0
 configure_requires:
-  DBI: 1.21
-resources:
-  license: http://dev.perl.org/licenses/
-  bugtracker: http://rt.cpan.org/Public/Dist/Display.html?Name=DBIx-LogAny
-  repository: https://github.com/mjegh/DBIx-LogAny.git
-  MailingList: http://dbi.perl.org/support
-installdirs:  site
-keywords:
-  - DBI
-  - DBD
-  - DBIx
-  - logging
-  - tracing
+  ExtUtils::MakeMaker: 0
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.120921'
+license: perl
 meta-spec:
-  version: 1.4
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
-generated_by: Martin J. Evans
-# ensure there is a newline at the end of this file or pause objects
+  version: 1.4
+name: DBIx-LogAny
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  DBI: 1.5
+  Data::Dumper: 0
+  File::Spec: 0
+  Log::Any: 0.14
+  Log::Any::Adapter: 0.1
+  Module::Load: 0
+  Test::More: 0.62
+resources:
+  bugtracker: http://rt.cpan.org/Public/Dist/Display.html?Name=DBIx-LogAny
+  homepage: http://search.cpan.org/dist/DBIx-LogAny
+  repository: https://github.com/mjegh/DBIx-LogAny.git
+  x_Mailinglist: http://dbi.perl.org/support
+version: 0.03
