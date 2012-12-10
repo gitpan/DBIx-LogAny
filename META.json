@@ -37,7 +37,7 @@
             "File::Spec" : "0",
             "Log::Any" : "0.14",
             "Log::Any::Adapter" : "0.1",
-            "Module::Load" : "0",
+            "Module::Loaded" : "0",
             "Test::More" : "0.62"
          }
       }
@@ -53,5 +53,5 @@
       },
       "x_Mailinglist" : "http://dbi.perl.org/support"
    },
-   "version" : "0.03"
+   "version" : "0.04"
 }
